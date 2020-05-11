@@ -11,6 +11,9 @@ typedef struct {
     int     count; // number of elements currently in the buffer
 
     int is_closed; // boolean. cf last exercice
+    sem_t *sem_add;
+    sem_t *sem_rem;
+
 } bag_t ;
 
 // Create a new bag with room for 'size' elements

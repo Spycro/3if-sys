@@ -10,7 +10,7 @@ typedef struct {
     int value;
 } boxed_int_t;
 
-
+pthread_mutex_t lock_value;
 
 typedef struct {
     int tnum; // thread number in 0 .. N-1
@@ -23,17 +23,20 @@ typedef struct {
 void *consumer(void *arg)
 {
     consumer_arg_t *carg=(consumer_arg_t *)arg;
-    // printf("consumer %d: start\n",carg->tnum);
-
+    printf("consumer %d: start\n",carg->tnum);
     while(1)
     {
         boxed_int_t *box = bb_take(carg->bag);
-        assert( box != NULL );
-
+        if(box == NULL){
+          break;
+        }
+        pthread_mutex_lock(&lock_value);
         carg->sum->value += box->value;
+        pthread_mutex_unlock(&lock_value);
     }
 
-    // printf("consumer %d: end\n",carg->tnum);
+
+    printf("consumer %d: end\n",carg->tnum);
     return NULL; // dummy return to comply with required signature
 }
 
@@ -50,7 +53,7 @@ void *producer(void *arg)
 {
     producer_arg_t *parg=(producer_arg_t *)arg;
 
-    // printf("producer %d:start \n",parg->tnum);
+    printf("producer %d:start \n",parg->tnum);
 
     int count;
     for( count = 0 ; count < parg->tnum+1 ; count ++)
@@ -58,11 +61,10 @@ void *producer(void *arg)
         boxed_int_t *box = malloc(sizeof(boxed_int_t));
         assert( box != NULL );
         box->value = 1;
-
         bb_add(parg->bag, box);
     }
 
-    // printf("producer %d:end\n",parg->tnum);
+    printf("producer %d:end\n",parg->tnum);
 
     return NULL; // dummy return to comply with required signature
 }
@@ -83,6 +85,9 @@ int main(int argc, char ** argv)
     // shared container
     bag_t *bag=bb_create(S);
     assert(bag != NULL);
+
+    //init mutex
+    pthread_mutex_init(&lock_value, NULL);
 
     int tnum;
     for( tnum = 0 ; tnum < N ; tnum++)
@@ -111,10 +116,17 @@ int main(int argc, char ** argv)
 
         pthread_create(&cons[tnum],NULL, consumer, carg);
     }
-    sleep(2);
 
     printf("expected sum=%d\n",N*(N+1)/2);
 
+
+    for (size_t i = 0; i < N; i++) {
+      pthread_join(prod[i], NULL);
+    }
+    bb_close(bag, N);
+    for (size_t i = 0; i < N; i++) {
+      pthread_join(cons[i], NULL);
+    }
     printf("computed sum=%d\n", sum->value);
 
     return 0;
